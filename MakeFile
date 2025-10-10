@@ -1,0 +1,6 @@
+SHELL := /bin/bash
+PATH := $(HOME)/.local/bin:$(PATH)
+
+init:
+	pip install -U pip
+	pip install -r requirements.txt
