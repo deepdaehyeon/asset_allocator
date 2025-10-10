@@ -1,0 +1,4 @@
+*pycache*
+*.log
+auto_trader/config/auth.yaml
+.env

@@ -1,0 +1,12 @@
+# 64378890-01:
+#   "USD":
+#     "TSLY":
+#       "qty": 0
+#     "PLTR":
+#       "qty": 0
+"upbit":
+  "KRW":
+    "BTC":
+      "amount": 40000
+    "ETH":
+      "amount": 60000
