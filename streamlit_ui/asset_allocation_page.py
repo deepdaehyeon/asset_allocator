@@ -3,13 +3,23 @@
 """
 import streamlit as st
 from .config_utils import load_asset_allocate_config, save_asset_allocate_config
-from .asset_utils import get_current_asset_ratios
+from .asset_utils import get_current_asset_ratios, clear_asset_ratios_cache
 
 
 def render_asset_allocation_page():
     """자산 배분 설정 페이지를 렌더링합니다."""
     st.header("자산 배분 설정 수정")
     st.write("AssetAllocateAgent.yaml 파일의 자산 배분 설정을 수정할 수 있습니다.")
+    
+    # 캐시 새로고침 버튼
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("🔄 새로고침", help="현재 자산 비율 데이터를 새로 조회합니다", type="secondary"):
+            clear_asset_ratios_cache()
+            st.success("캐시가 초기화되었습니다. 데이터를 새로 조회합니다.")
+            st.rerun()
+    with col2:
+        st.caption("💡 자산 비율 데이터는 5분간 캐시됩니다. 최신 데이터가 필요하면 새로고침 버튼을 클릭하세요.")
     
     # 설정 파일 로드
     config = load_asset_allocate_config()

@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Streamlit 앱 시작 스크립트
-
 echo "🚀 Asset Allocation Dashboard 시작 중..."
 
 # 가상환경 활성화

@@ -34,6 +34,7 @@ def timeout_handler(seconds):
         signal.signal(signal.SIGALRM, old_handler)
 
 
+@st.cache_data(ttl=300)  # 5분 캐시
 def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
     """실제 계좌에서 현재 자산 비율을 가져옵니다."""
     # 일단 샘플 데이터를 사용하도록 임시 변경
@@ -137,6 +138,11 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
     except Exception as e:
         st.error(f"현재 자산 비율 조회 중 오류: {e}")
         return get_sample_asset_ratios()
+
+
+def clear_asset_ratios_cache():
+    """자산 비율 캐시를 무효화합니다."""
+    get_current_asset_ratios.clear()
 
 
 def get_sample_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:

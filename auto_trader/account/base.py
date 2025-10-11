@@ -20,17 +20,6 @@ class BaseAccount:
         """initialize."""
         self.acc_no = acc_no
         self.messenger = Messenger(acc_no)
-        self._send_activation_message()
-
-    def _send_activation_message(self) -> None:
-        """Send account activation message."""
-        KST = timezone('Asia/Seoul')
-        now = datetime.utcnow()
-        time = KST.localize(now)
-        self.messenger.send_msg(
-            f"{self.name} activated at {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            mention=False,
-        )
 
     @abstractmethod
     def get_balance(self) -> Balance:
