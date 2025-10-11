@@ -12,10 +12,11 @@ class BaseAgent:
     name: str = "BaseAgent"
     amt_limit: int = DEFAULT_AMOUNT_LIMIT
 
-    def __init__(self, acnt: BaseAccount, config: dict):
+    def __init__(self, acnt: BaseAccount, config: dict, forced: bool =False):
         """Initialize agent with account and configuration."""
         self.acnt = acnt
         self.config = config
+        self.forced = forced
 
     @abstractmethod
     def run(self) -> None:

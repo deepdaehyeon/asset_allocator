@@ -47,6 +47,12 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run Leverage Swing Agent",
     )
+    parser.add_argument(
+        "-f",
+        "--forced",
+        action="store_true",
+        help="RUN force, ignore any condition",
+    )
     return parser
 
 
@@ -77,16 +83,17 @@ def create_account(acc_no: str, auth_config: dict) -> BaseAccount:
     return account_class(acc_no=acc_no, **auth_config[acc_no])
 
 
-def create_agent(agent_name: str, account: BaseAccount, config: dict) -> BaseAgent:
+def create_agent(agent_name: str, acc_no:str, auth_config:dict, config: dict, forced:bool =False) -> BaseAgent:
     """Create agent instance."""
+    account = create_account(acc_no, auth_config)
     if agent_name not in AGENT_REGISTRY:
         raise ValueError(f"Unsupported agent: {agent_name}")
 
     agent_class = AGENT_REGISTRY[agent_name]
-    return agent_class(acnt=account, config=config)
+    return agent_class(acnt=account, config=config, forced =forced)
 
 
-def run_agent(agent_name: str, base_dir: Path, auth_config: dict) -> None:
+def run_agent(agent_name: str, base_dir: Path, auth_config: dict, forced:bool =False) -> None:
     """Run specified trading agent."""
     print(f"Starting {agent_name}...")
 
@@ -100,8 +107,7 @@ def run_agent(agent_name: str, base_dir: Path, auth_config: dict) -> None:
             print(f"Processing account: {acc_no}")
 
             # Create account and agent
-            account = create_account(acc_no, auth_config)
-            agent = create_agent(agent_name, account, account_config)
+            agent = create_agent(agent_name, acc_no, auth_config, account_config, forced)
 
             # Run the agent
             agent.run()
@@ -126,7 +132,7 @@ def main():
 
     # Parse command line arguments
     parser = setup_argument_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(['-aaa'])
 
     # Check if any agent is specified
     agents_to_run = [agent for agent in AGENT_REGISTRY.keys() if getattr(args, agent)]
@@ -137,7 +143,7 @@ def main():
 
     # Run specified agents
     for agent_name in agents_to_run:
-        run_agent(agent_name, base_dir, auth_config)
+        run_agent(agent_name, base_dir, auth_config, forced=args.forced)
 
     print("All agents completed.")
 

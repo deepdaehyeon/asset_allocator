@@ -64,7 +64,7 @@ class AssetAllocateAgent(BaseAgent):
             assets_config,
             threshold,
             currency,
-        ):
+        ) or self.forced:
             return
 
         # Execute rebalancing

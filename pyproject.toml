@@ -26,6 +26,7 @@ dependencies = [
     "python-kis==2.0.3",
     "slack-sdk==3.33.0",
     "streamlit>=1.50.0",
+    "jwt>=1.4.0",
 ]
 
 [build-system]

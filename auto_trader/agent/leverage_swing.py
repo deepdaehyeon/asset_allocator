@@ -5,7 +5,7 @@ from auto_trader.utils import handle_exceptions
 
 from .base import BaseAgent
 
-
+# Deprecated
 class LeverageSwingAgent(BaseAgent):
     """Leverage swing agent class.
 

@@ -35,7 +35,7 @@ class CostAverageAgent(BaseAgent):
         for currency in self.config.keys():
             for ticker, info in self.config[currency].items():
                 # Check max quantity constraint
-                if self._should_skip_due_to_max_qty(ticker, info):
+                if self._should_skip_due_to_max_qty(ticker, info) or self.forced:
                     continue
 
                 # Extract order parameters
