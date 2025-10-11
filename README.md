@@ -35,3 +35,6 @@ streamlit run streamlit_app_new.py
 
 ## TODO
 - 중복 오더 방지
+
+## TMUX background running
+tmux new-session -d -s streamlit 'source .venv/bin/activate && streamlit run streamlit_app_new.py --server.port 8501 --server.address 0.0.0.0'

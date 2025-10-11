@@ -6,7 +6,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any
 import sys
-import signal
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -16,22 +16,14 @@ from run import create_account
 from auto_trader.constants import MARKET_MAPPING
 
 
-@contextmanager
-def timeout_handler(seconds):
-    """타임아웃을 처리하는 컨텍스트 매니저"""
-    def timeout_signal_handler(signum, frame):
-        raise TimeoutError(f"작업이 {seconds}초 내에 완료되지 않았습니다.")
-    
-    # 기존 시그널 핸들러 저장
-    old_handler = signal.signal(signal.SIGALRM, timeout_signal_handler)
-    signal.alarm(seconds)
-    
-    try:
-        yield
-    finally:
-        # 시그널 해제 및 기존 핸들러 복원
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
+def run_with_timeout(func, timeout_seconds, *args, **kwargs):
+    """함수를 타임아웃과 함께 실행합니다."""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout_seconds)
+        except FutureTimeoutError:
+            raise TimeoutError(f"작업이 {timeout_seconds}초 내에 완료되지 않았습니다.")
 
 
 @st.cache_data(ttl=300)  # 5분 캐시
@@ -70,14 +62,12 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
                 if not account:
                     st.warning(f"계좌 {account_id} 생성 실패")
                     continue
-                print(auth_config)
                 
                 st.info(f"계좌 {account_id} 잔고 조회 중...")
                 
                 # 잔고 조회 (30초 타임아웃 적용)
                 try:
-                    with timeout_handler(30):
-                        balance = account.get_balance()
+                    balance = run_with_timeout(account.get_balance, 30)
                 except TimeoutError as e:
                     st.error(f"계좌 {account_id} 잔고 조회 타임아웃: {e}")
                     continue
@@ -101,8 +91,7 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
                     
                     # 현금 (10초 타임아웃 적용)
                     try:
-                        with timeout_handler(10):
-                            cash_amount = account.get_cash(currency)
+                        cash_amount = run_with_timeout(account.get_cash, 10, currency)
                         amt['cash'] = cash_amount
                     except TimeoutError as timeout_error:
                         st.warning(f"계좌 {account_id} {currency} 현금 조회 타임아웃: {timeout_error}")
