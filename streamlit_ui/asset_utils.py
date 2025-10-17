@@ -32,8 +32,9 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
     # 일단 샘플 데이터를 사용하도록 임시 변경
     # 실제 API 호출은 시간이 오래 걸리고 안정성 문제가 있을 수 있음
     try:
+        raise "샘플데이터 사용하도록 임시 변경"
         # 인증 설정 로드
-        auth_path = Path("auto_trader/config/auth.yaml")
+        auth_path = Path(os.path.join(AUTH_DIR, "keys.yaml"))
         if not auth_path.exists():
             st.warning("인증 설정 파일이 없습니다. 샘플 데이터를 사용합니다.")
             return get_sample_asset_ratios()

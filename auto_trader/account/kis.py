@@ -6,6 +6,7 @@ import pykis
 
 from .base import BaseAccount
 from .models import Balance, Stock
+from ..constants import AUTH_DIR
 
 
 class KisAccount(BaseAccount):
@@ -16,11 +17,17 @@ class KisAccount(BaseAccount):
     def __init__(self, id: str, appkey: str, secretkey: str, acc_no: str):
         """Initialize KIS account."""
         super().__init__(acc_no=acc_no)
-        self.kis = pykis.PyKis(
+        auth = pykis.KisAuth(
             id=id,
             appkey=appkey,
             secretkey=secretkey,
             account=acc_no,
+            virtual=False,
+        )
+        auth_path =f"{AUTH_DIR}/{acc_no}_secret.json"
+        auth.save(auth_path)
+        self.kis = pykis.PyKis(
+            auth_path,
             keep_token=True,  # API 접속 토큰 자동 저장
         )
 
@@ -59,39 +66,31 @@ class KisAccount(BaseAccount):
 
     def get_balance(self) -> Balance:
         """Return account balance with typed data structure."""
-        try:
-            balance_raw = self.kis.account().balance()
+        balance_raw = self.kis.account().balance()
 
-            # Convert to our data model
-            stocks = []
-            for stock_data in balance_raw.stocks:
-                stock = Stock(
-                    symbol=stock_data.symbol,
-                    amount=float(stock_data.amount),
-                    market=stock_data.market,
-                    profit=getattr(stock_data, 'profit', 0.0),
-                )
-                stocks.append(stock)
-
-            balance = Balance(
-                deposits=balance_raw.deposits,
-                stocks=stocks,
-                account_number=getattr(balance_raw, 'account_number', None),
+        # Convert to our data model
+        stocks = []
+        for stock_data in balance_raw.stocks:
+            stock = Stock(
+                symbol=stock_data.symbol,
+                amount=float(stock_data.amount),
+                market=stock_data.market,
+                profit=getattr(stock_data, 'profit', 0.0),
             )
-            return balance
-        except Exception as e:
-            self.messenger.send_msg(f"Error getting balance: {str(e)}")
-            raise
+            stocks.append(stock)
+
+        balance = Balance(
+            deposits=balance_raw.deposits,
+            stocks=stocks,
+            account_number=getattr(balance_raw, 'account_number', None),
+        )
+        return balance
 
     def get_cash(self, currency: str) -> float:
         """Get available cash for specified currency."""
-        try:
-            ticker = "379800" if currency == "KRW" else "QQQ"
-            stock = self.kis.stock(ticker)
-            return float(stock.orderable_amount(price=1).amount)
-        except Exception as e:
-            self.messenger.send_msg(f"Error getting cash for {currency}: {str(e)}")
-            return 0.0
+        ticker = "379800" if currency == "KRW" else "QQQ"
+        stock = self.kis.stock(ticker)
+        return float(stock.orderable_amount(price=1).amount)
 
     def get_stock_price(
         self,
@@ -100,41 +99,32 @@ class KisAccount(BaseAccount):
         currency: str = "KRW",
     ) -> float:
         """Get current stock price for specified action."""
+        stock = self.kis.stock(ticker)
         try:
-            stock = self.kis.stock(ticker)
+            order_book = stock.orderbook()
+            price = (
+                order_book.ask_price.price
+                if action == "buy"
+                else order_book.bid_price.price
+            )
+        except:
+            price = stock.quote().high if action == "buy" else stock.quote().low
 
-            try:
-                order_book = stock.orderbook()
-                price = (
-                    order_book.ask_price.price
-                    if action == "buy"
-                    else order_book.bid_price.price
-                )
-            except:
-                price = stock.quote().high if action == "buy" else stock.quote().low
-
-            # Adjust price to proper tick size based on currency
-            price = self._adjust_price_to_tick_size(float(price), currency)
-            return price
-        except Exception as e:
-            self.messenger.send_msg(f"Error getting price for {ticker}: {str(e)}")
-            return 0.0
+        # Adjust price to proper tick size based on currency
+        price = self._adjust_price_to_tick_size(float(price), currency)
+        return price
 
     def get_qty_stock(self, ticker: str) -> float:
         """Get current quantity of specified stock."""
-        try:
-            balance = self.kis.account().balance()
-            qty = 0.0
-            for stock_data in balance.stocks:
-                if ticker == stock_data.symbol:
-                    qty = float(stock_data.qty)
-                    break
+        balance = self.kis.account().balance()
+        qty = 0.0
+        for stock_data in balance.stocks:
+            if ticker == stock_data.symbol:
+                qty = float(stock_data.qty)
+                break
 
-            self.messenger.send_msg(f"{ticker} in {balance.account_number}: {qty}")
-            return qty
-        except Exception as e:
-            self.messenger.send_msg(f"Error getting quantity for {ticker}: {str(e)}")
-            return 0.0
+        self.messenger.send_msg(f"{ticker} in {balance.account_number}: {qty}")
+        return qty
 
     def order(
         self,
@@ -144,67 +134,61 @@ class KisAccount(BaseAccount):
         currency: Optional[str] = None,
     ) -> None:
         """Place order for specified stock."""
-        try:
-            # Calculate quantity if not provided
-            if qty is None and amount is not None:
-                current_price = self.get_stock_price(ticker, currency=currency or "KRW")
-                qty = amount / current_price
-            elif qty is None:
-                raise ValueError("Either amount or qty must be provided")
+        # Calculate quantity if not provided
+        if qty is None and amount is not None:
+            current_price = self.get_stock_price(ticker, currency=currency or "KRW")
+            qty = amount / current_price
+        elif qty is None:
+            raise ValueError("Either amount or qty must be provided")
 
-            qty = math.floor(abs(qty)) * (1 if qty > 0 else -1)
+        qty = math.floor(abs(qty)) * (1 if qty > 0 else -1)
 
-            # Skip if quantity is 0
-            if qty == 0:
-                self.messenger.send_msg(f"Order quantity is 0 for {ticker}, skipping")
+        # Skip if quantity is 0
+        if qty == 0:
+            self.messenger.send_msg(f"Order quantity is 0 for {ticker}, skipping")
+            return
+
+        action = "buy" if qty > 0 else "sell"
+
+        # Get fresh price and validate cash availability
+        trade_price = self.get_stock_price(ticker, action, currency or "KRW")
+
+        if action == "buy":
+            cash = self.get_cash(currency or "KRW")
+            while qty * trade_price > cash and qty > 0:
+                qty -= 1
+
+            if qty <= 0:
+                self.messenger.send_msg(f"Insufficient cash for {ticker} order")
                 return
 
-            action = "buy" if qty > 0 else "sell"
+        # Execute order
+        stock = self.kis.stock(ticker)
+        order_method = getattr(stock, action)
 
-            # Get fresh price and validate cash availability
-            trade_price = self.get_stock_price(ticker, action, currency or "KRW")
+        # Wait for order completion with price adjustment
+        rate = 1.01 if action == "buy" else 0.99
+        cnt = 0
 
-            if action == "buy":
-                cash = self.get_cash(currency or "KRW")
-                while qty * trade_price > cash and qty > 0:
-                    qty -= 1
+        trade_price *= rate
+        order = order_method(qty=abs(qty), price=trade_price)
+        while order.pending:
+            time.sleep(1)
+            cnt += 1
 
-                if qty <= 0:
-                    self.messenger.send_msg(f"Insufficient cash for {ticker} order")
-                    return
+            # # Adjust price periodically
+            # if cnt % 100 == 0:
+            #     # Adjust to proper tick size
+            #     trade_price = self._adjust_price_to_tick_size(
+            #         trade_price,
+            #         currency or "KRW",
+            #     )
+            #     order = order_method(qty=abs(qty), price=trade_price)
 
-            # Execute order
-            stock = self.kis.stock(ticker)
-            order_method = getattr(stock, action)
-            order = order_method(qty=abs(qty), price=trade_price)
+            # Break after timeout
+            if cnt % 1000 == 0:
+                self.messenger.send_msg(f"Order timeout for {ticker}, breaking")
+                break
 
-            # Wait for order completion with price adjustment
-            rate = 1.001 if action == "buy" else 0.999
-            cnt = 0
-
-            while order.pending:
-                time.sleep(1)
-                cnt += 1
-
-                # Adjust price periodically
-                if cnt % 100 == 0:
-                    trade_price *= rate
-                    # Adjust to proper tick size
-                    trade_price = self._adjust_price_to_tick_size(
-                        trade_price,
-                        currency or "KRW",
-                    )
-                    order = order_method(qty=abs(qty), price=trade_price)
-
-                # Break after timeout
-                if cnt % 1000 == 0:
-                    self.messenger.send_msg(f"Order timeout for {ticker}, breaking")
-                    break
-
-            # Log the successful order
-            super().order(ticker=ticker, qty=qty, currency=currency)
-
-        except Exception as e:
-            error_msg = getattr(e, 'msg1', str(e))
-            self.messenger.send_msg(f"Order failed for {ticker}: {error_msg}")
-            raise
+        # Log the successful order
+        super().order(ticker=ticker, qty=qty, currency=currency)

@@ -1,4 +1,6 @@
 upbit:
   KRW:
-    BTC: 40000.0
-    ETH: 59000.0
+    BTC:
+      amount: 40000.0
+    ETH:
+      amount: 59000.0

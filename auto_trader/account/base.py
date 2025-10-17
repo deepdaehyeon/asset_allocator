@@ -5,7 +5,7 @@ from typing import Optional
 from pytz import timezone
 
 from auto_trader.constants import DEFAULT_AMOUNT_LIMIT
-from auto_trader.utils import Messenger, handle_exceptions
+from auto_trader.utils import Messenger
 
 from .models import Balance
 

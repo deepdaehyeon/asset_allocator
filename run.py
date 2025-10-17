@@ -11,6 +11,7 @@ from auto_trader.account import KisAccount, UpbitAccount
 from auto_trader.account.base import BaseAccount
 from auto_trader.agent import AssetAllocateAgent, CostAverageAgent, LeverageSwingAgent
 from auto_trader.agent.base import BaseAgent
+from auto_trader.constants import AUTH_DIR, CONFIG_DIR
 
 # Agent registry
 AGENT_REGISTRY: Dict[str, Type[BaseAgent]] = {
@@ -93,30 +94,24 @@ def create_agent(agent_name: str, acc_no:str, auth_config:dict, config: dict, fo
     return agent_class(acnt=account, config=config, forced =forced)
 
 
-def run_agent(agent_name: str, base_dir: Path, auth_config: dict, forced:bool =False) -> None:
+def run_agent(agent_name: str, auth_config: dict, forced:bool =False) -> None:
     """Run specified trading agent."""
     print(f"Starting {agent_name}...")
 
     # Load agent configuration
-    config_path = base_dir / "auto_trader" / "config" / f"{agent_name}.yaml"
+    config_path = os.path.join(CONFIG_DIR, f"{agent_name}.yaml")
     agent_config = load_config_file(config_path)
 
     # Process each account configuration
     for acc_no, account_config in agent_config.items():
-        try:
-            print(f"Processing account: {acc_no}")
+        print(f"Processing account: {acc_no}")
 
-            # Create account and agent
-            agent = create_agent(agent_name, acc_no, auth_config, account_config, forced)
+        # Create account and agent
+        agent = create_agent(agent_name, acc_no, auth_config, account_config, forced)
 
-            # Run the agent
-            agent.run()
-            print(f"Successfully completed {agent_name} for account {acc_no}")
-
-        except Exception as e:
-            print(f"Error running {agent_name} for account {acc_no}: {e}")
-            continue
-
+        # Run the agent
+        agent.run()
+        print(f"Successfully completed {agent_name} for account {acc_no}")
 
 def main():
     """Main function."""
@@ -124,8 +119,7 @@ def main():
     dotenv.load_dotenv()
 
     # Setup paths
-    base_dir = Path(__file__).parent
-    auth_path = base_dir / "auto_trader" / "config" / "auth.yaml"
+    auth_path = os.path.join(AUTH_DIR, "keys.yaml")
 
     # Load authentication configuration
     auth_config = load_config_file(auth_path)
@@ -143,7 +137,7 @@ def main():
 
     # Run specified agents
     for agent_name in agents_to_run:
-        run_agent(agent_name, base_dir, auth_config, forced=args.forced)
+        run_agent(agent_name, auth_config, forced=args.forced)
 
     print("All agents completed.")
 

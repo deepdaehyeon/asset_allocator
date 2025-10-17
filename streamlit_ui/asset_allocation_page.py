@@ -3,7 +3,7 @@
 """
 import streamlit as st
 from .config_utils import load_asset_allocate_config, save_asset_allocate_config
-from .asset_utils import get_current_asset_ratios, clear_asset_ratios_cache
+from .asset_utils import clear_asset_ratios_cache
 
 
 def render_asset_allocation_page():
@@ -56,15 +56,12 @@ def render_asset_allocation_page():
                 new_assets = st.session_state[f"assets_{account_id}_{currency}"]
                 total_ratio = 0.0
                 
-                # 현재 자산 비율 가져오기
-                current_ratios = get_current_asset_ratios()
-                current_currency_ratios = current_ratios.get(account_id, {}).get(currency, {})
                 
                 # 기존 자산들 표시
                 assets_to_remove = []
                 if new_assets:
                     for asset_code, ratio in new_assets.items():
-                        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                        col1, col2, col3 = st.columns([2, 1, 1])
                         with col1:
                             st.write(f"`{asset_code}`")
                         with col2:
@@ -79,14 +76,6 @@ def render_asset_allocation_page():
                             new_assets[asset_code] = new_ratio
                             total_ratio += new_ratio
                         with col3:
-                            # 현재 비율 표시
-                            current_ratio = current_currency_ratios.get(asset_code, 0.0)
-                            st.metric(
-                                "현재 비율",
-                                f"{current_ratio:.1%}",
-                                delta=f"{new_ratio - current_ratio:+.1%}" if new_ratio != current_ratio else None
-                            )
-                        with col4:
                             if st.button("🗑️", key=f"delete_{account_id}_{currency}_{asset_code}", help="자산 삭제", type="secondary"):
                                 assets_to_remove.append(asset_code)
                 else:
