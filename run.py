@@ -126,7 +126,7 @@ def main():
 
     # Parse command line arguments
     parser = setup_argument_parser()
-    args = parser.parse_args(['-aaa'])
+    args = parser.parse_args()
 
     # Check if any agent is specified
     agents_to_run = [agent for agent in AGENT_REGISTRY.keys() if getattr(args, agent)]
