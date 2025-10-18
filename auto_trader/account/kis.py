@@ -176,17 +176,19 @@ class KisAccount(BaseAccount):
             time.sleep(1)
             cnt += 1
 
-            # # Adjust price periodically
-            # if cnt % 100 == 0:
-            #     # Adjust to proper tick size
-            #     trade_price = self._adjust_price_to_tick_size(
-            #         trade_price,
-            #         currency or "KRW",
-            #     )
-            #     order = order_method(qty=abs(qty), price=trade_price)
+            # Adjust price periodically
+            if cnt % 100 == 0:
+                # Adjust to proper tick size
+                prev_price = trade_price
+                trade_price = self._adjust_price_to_tick_size(
+                    trade_price,
+                    currency or "KRW",
+                )
+                order.modify(qty=abs(qty), price=trade_price)
+                self.messenger.send_msg(f"Modify the price of order for {ticker}: {prev_price} -> {trade_price}...")
 
             # Break after timeout
-            if cnt % 1000 == 0:
+            if cnt % 200 == 0:
                 self.messenger.send_msg(f"Order timeout for {ticker}, breaking")
                 break
 
