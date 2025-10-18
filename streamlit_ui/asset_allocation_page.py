@@ -3,30 +3,27 @@
 """
 import streamlit as st
 from .config_utils import load_asset_allocate_config, save_asset_allocate_config
-from .asset_utils import clear_asset_ratios_cache
+from .asset_utils import get_current_asset_ratios, get_sample_asset_ratios
 
 
 def render_asset_allocation_page():
     """자산 배분 설정 페이지를 렌더링합니다."""
     st.header("자산 배분 설정 수정")
     st.write("AssetAllocateAgent.yaml 파일의 자산 배분 설정을 수정할 수 있습니다.")
-    
-    # 캐시 새로고침 버튼
+
+    # 설정 파일 로드
+    config = load_asset_allocate_config()
+
+    # 현재 비율 불러오기 버튼
     col1, col2 = st.columns([1, 4])
+    st.session_state['real_assets_ratio'] = get_sample_asset_ratios() 
     with col1:
-        if st.button("🔄 새로고침", help="현재 자산 비율 데이터를 새로 조회합니다", type="secondary"):
-            clear_asset_ratios_cache()
-            st.success("캐시가 초기화되었습니다. 데이터를 새로 조회합니다.")
-            st.rerun()
+        if st.button("🔄 자산 불러오기", help="현재 자산 비율 데이터를 새로 조회합니다", type="secondary"):
+            real_assets = get_current_asset_ratios()
+            st.session_state['real_assets_ratio'] = real_assets
     with col2:
         st.caption("💡 자산 비율 데이터는 5분간 캐시됩니다. 최신 데이터가 필요하면 새로고침 버튼을 클릭하세요.")
     
-    # 설정 파일 로드
-    config = load_asset_allocate_config()
-    
-    if not config:
-        st.error("설정 파일을 로드할 수 없습니다.")
-        return
     
     # 계좌별 설정 편집
     for account_id, account_config in config.items():
@@ -48,23 +45,32 @@ def render_asset_allocation_page():
                 # 자산별 비율 설정
                 st.write("**자산별 비율 설정:**")
                 assets = currency_config.get('assets', {})
-                
+
                 # 자산 추가/삭제를 위한 세션 상태 초기화
                 if f"assets_{account_id}_{currency}" not in st.session_state:
                     st.session_state[f"assets_{account_id}_{currency}"] = assets.copy()
                 
                 new_assets = st.session_state[f"assets_{account_id}_{currency}"]
+                cur_assets = st.session_state["real_assets_ratio"][account_id][currency]
                 total_ratio = 0.0
-                
                 
                 # 기존 자산들 표시
                 assets_to_remove = []
                 if new_assets:
                     for asset_code, ratio in new_assets.items():
-                        col1, col2, col3 = st.columns([2, 1, 1])
+                        col1, col2,  col3, col4 = st.columns([1,1, 1, 1])
                         with col1:
                             st.write(f"`{asset_code}`")
                         with col2:
+                            cur_ratio= st.number_input(
+                                "현재 비율",
+                                min_value=0.0,
+                                max_value=1.0,
+                                value=cur_assets.get(asset_code, 0.0),
+                                step=0.01,
+                                key=f"cur_asset_{account_id}_{currency}_{asset_code}"
+                            )
+                        with col3:
                             new_ratio = st.number_input(
                                 "목표 비율",
                                 min_value=0.0,
@@ -75,7 +81,7 @@ def render_asset_allocation_page():
                             )
                             new_assets[asset_code] = new_ratio
                             total_ratio += new_ratio
-                        with col3:
+                        with col4:
                             if st.button("🗑️", key=f"delete_{account_id}_{currency}_{asset_code}", help="자산 삭제", type="secondary"):
                                 assets_to_remove.append(asset_code)
                 else:

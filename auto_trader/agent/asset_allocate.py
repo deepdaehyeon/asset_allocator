@@ -46,56 +46,58 @@ class AssetAllocateAgent(BaseAgent):
             for currency in balance.deposits.keys():
                 if currency not in self.config.keys():
                     continue
+                try:
+                    # Get configuration
+                    currency_config = self.config[currency]
+                    threshold = currency_config.get('threshold', self.threshold)
+                    target_ratio = currency_config['assets']
+                    total_ratio = sum(target_ratio.values())
+                    if total_ratio > 1.0:
+                        self.send_msg(
+                            f"ERROR: Sum of ratios ({total_ratio:.3f}) is larger than 1.0 for {currency}",
+                        )
 
-                # Get configuration
-                currency_config = self.config[currency]
-                threshold = currency_config.get('threshold', self.threshold)
-                target_ratio = currency_config['assets']
-                total_ratio = sum(target_ratio.values())
-                if total_ratio > 1.0:
-                    self.send_msg(
-                        f"ERROR: Sum of ratios ({total_ratio:.3f}) is larger than 1.0 for {currency}",
-                    )
+                    # Get current amount
+                    amt = self._get_current_amount(currency, balance)
+                    amt_total = sum(amt.values())
+                    if amt_total == 0:
+                        self.send_msg(f"No assets found for {currency}")
+                        return
 
-                # Get current amount
-                amt = self._get_current_amount(currency, balance)
-                amt_total = sum(amt.values())
-                if amt_total == 0:
-                    self.send_msg(f"No assets found for {currency}")
-                    return
+                    # Get current ratio
+                    current_ratio: Dict[str, float] = defaultdict(float)
+                    all_assets= set(amt.keys()).union(set(target_ratio.keys()))
+                    for asset_name in all_assets:
+                        current_ratio[asset_name] = amt[asset_name] / amt_total
 
-                # Get current ratio
-                current_ratio: Dict[str, float] = defaultdict(float)
-                all_assets= set(amt.keys()).union(set(target_ratio.keys()))
-                for asset_name in all_assets:
-                    current_ratio[asset_name] = amt[asset_name] / amt_total
+                    # Check if rebalancing is needed
+                    ratio_diff = 0.0
+                    for asset in all_assets:
+                        diff = abs(target_ratio.get(asset, 0.0) - current_ratio.get(asset, 0.0))
+                        ratio_diff += diff
+                    if ratio_diff < threshold and not self.forced:
+                        self.send_msg(
+                            f"Ratio difference is {ratio_diff*100:.1f}% less than {threshold*100:.1f}% for {currency}, "
+                            "so don't activate rebalancing",
+                        )
+                        continue
 
-                # Check if rebalancing is needed
-                ratio_diff = 0.0
-                for asset in all_assets:
-                    diff = abs(target_ratio.get(asset, 0.0) - current_ratio.get(asset, 0.0))
-                    ratio_diff += diff
-                if ratio_diff < threshold and not self.forced:
-                    self.send_msg(
-                        f"Ratio difference is {ratio_diff*100:.1f}% less than {threshold*100:.1f}% for {currency}, "
-                        "so don't activate rebalancing",
-                    )
-                    continue
+                    # Execute rebalancing
+                    order_queue: List[tuple] = []
 
-                # Execute rebalancing
-                order_queue: List[tuple] = []
+                    for ticker in all_assets:
+                        amt_target = target_ratio.get(ticker, 0.0) * amt_total
+                        amt_diff = amt_target - amt.get(ticker, 0.0)
+                        order_queue.append((ticker, amt_diff, currency))
 
-                for ticker in all_assets:
-                    amt_target = target_ratio.get(ticker, 0.0) * amt_total
-                    amt_diff = amt_target - amt.get(ticker, 0.0)
-                    order_queue.append((ticker, amt_diff, currency))
+                    # Sort queue (sell orders first, then buy orders)
+                    order_queue.sort(key=lambda x: x[1])
+                    self.send_msg(f"Executing {len(order_queue)} rebalancing orders for {currency}")
 
-                # Sort queue (sell orders first, then buy orders)
-                order_queue.sort(key=lambda x: x[1])
-                self.send_msg(f"Executing {len(order_queue)} rebalancing orders for {currency}")
-
-                # Execute orders
-                self._execute_order_queue(order_queue)
+                    # Execute orders
+                    self._execute_order_queue(order_queue)
+                except Exception as e: 
+                    print(e)
         finally:
             self._release_lock()
 

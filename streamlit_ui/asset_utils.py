@@ -2,41 +2,48 @@
 자산 비율 조회 유틸리티
 """
 import streamlit as st
-import yaml
 from pathlib import Path
-from typing import Dict, Any
+import os
+import yaml
+from typing import Dict
 import sys
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from contextlib import contextmanager
+import threading
 
 # 프로젝트 루트를 Python 경로에 추가
 sys.path.append(str(Path(__file__).parent.parent))
 
 from run import create_account
-from auto_trader.constants import MARKET_MAPPING
+from auto_trader.constants import MARKET_MAPPING, AUTH_DIR
 
+# 전역 락
+_account_lock = threading.Lock()
 
-def run_with_timeout(func, timeout_seconds, *args, **kwargs):
-    """함수를 타임아웃과 함께 실행합니다."""
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(func, *args, **kwargs)
+@st.cache_resource  # cache_data가 아닌 cache_resource 사용!
+def get_kis_accounts(auth_config: dict) -> dict:
+    """KIS 계좌 객체들을 싱글톤으로 관리 (thread-safe)"""
+    print("🔧 KIS 계좌 객체 생성 중...", file=sys.stderr, flush=True)
+    accounts = {}
+    
+    for account_id, credentials in auth_config.items():
         try:
-            return future.result(timeout=timeout_seconds)
-        except FutureTimeoutError:
-            raise TimeoutError(f"작업이 {timeout_seconds}초 내에 완료되지 않았습니다.")
+            # 계좌 생성 (한 번만)
+            account = create_account(account_id, credentials)
+            if account:
+                accounts[account_id] = account
+                print(f"✅ 계좌 {account_id} 생성 완료", file=sys.stderr)
+        except Exception as e:
+            print(f"❌ 계좌 {account_id} 생성 실패: {e}", file=sys.stderr)
+    
+    return accounts
 
 
-@st.cache_data(ttl=300)  # 5분 캐시
 def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
     """실제 계좌에서 현재 자산 비율을 가져옵니다."""
-    # 일단 샘플 데이터를 사용하도록 임시 변경
-    # 실제 API 호출은 시간이 오래 걸리고 안정성 문제가 있을 수 있음
     try:
-        raise "샘플데이터 사용하도록 임시 변경"
         # 인증 설정 로드
         auth_path = Path(os.path.join(AUTH_DIR, "keys.yaml"))
         if not auth_path.exists():
-            st.warning("인증 설정 파일이 없습니다. 샘플 데이터를 사용합니다.")
+            print("⚠️ 인증 설정 파일이 없습니다.", file=sys.stderr)
             return get_sample_asset_ratios()
         
         with open(auth_path, 'r', encoding='utf-8') as f:
@@ -48,33 +55,47 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
         if not config:
             return get_sample_asset_ratios()
         
+        # 싱글톤 계좌 객체 가져오기 (캐시됨)
+        accounts = get_kis_accounts(auth_config)
+        
         current_ratios = {}
         
         for account_id in config.keys():
-            if account_id not in auth_config:
-                st.info(f"계좌 {account_id}의 인증 정보가 없습니다. 건너뜁니다.")
+            if account_id not in accounts:
+                print(f"⚠️ 계좌 {account_id} 객체 없음", file=sys.stderr)
                 continue
-                
+            
+            account = accounts[account_id]
+            
             try:
-                st.info(f"계좌 {account_id} 조회 중...")
+                print(f"🔍 계좌 {account_id} 조회 시작", file=sys.stderr, flush=True)
                 
-                # 계좌 생성
-                account = create_account(account_id, auth_config)
-                if not account:
-                    st.warning(f"계좌 {account_id} 생성 실패")
-                    continue
+                # 전역 락으로 한 번에 하나씩만 API 호출
+                with _account_lock:
+                    print(f"💰 계좌 {account_id} 잔고 조회 중...", file=sys.stderr, flush=True)
+                    
+                    # 타임아웃 적용
+                    import signal
+                    
+                    def timeout_handler(signum, frame):
+                        raise TimeoutError("잔고 조회 30초 초과")
+                    
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(30)
+                    
+                    try:
+                        balance = account.get_balance()
+                        signal.alarm(0)
+                    except TimeoutError:
+                        print(f"❌ 계좌 {account_id} 타임아웃", file=sys.stderr)
+                        signal.alarm(0)
+                        continue
+                    finally:
+                        signal.signal(signal.SIGALRM, signal.SIG_DFL)
                 
-                st.info(f"계좌 {account_id} 잔고 조회 중...")
+                print(f"✅ 계좌 {account_id} 잔고 수신", file=sys.stderr, flush=True)
                 
-                # 잔고 조회 (30초 타임아웃 적용)
-                try:
-                    balance = run_with_timeout(account.get_balance, 30)
-                except TimeoutError as e:
-                    st.error(f"계좌 {account_id} 잔고 조회 타임아웃: {e}")
-                    continue
                 current_ratios[account_id] = {}
-                
-                st.info(f"계좌 {account_id} 자산 비율 계산 중...")
                 
                 # 각 통화별로 자산 비율 계산
                 for currency in balance.deposits.keys():
@@ -90,16 +111,23 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
                         if stock.market in currency_markets:
                             amt[stock.symbol] = float(stock.amount)
                     
-                    # 현금 (10초 타임아웃 적용)
-                    try:
-                        cash_amount = run_with_timeout(account.get_cash, 10, currency)
-                        amt['cash'] = cash_amount
-                    except TimeoutError as timeout_error:
-                        st.warning(f"계좌 {account_id} {currency} 현금 조회 타임아웃: {timeout_error}")
-                        amt['cash'] = 0.0
-                    except Exception as cash_error:
-                        st.warning(f"계좌 {account_id} {currency} 현금 조회 실패: {cash_error}")
-                        amt['cash'] = 0.0
+                    # 현금
+                    with _account_lock:
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(10)
+                        try:
+                            cash_amount = account.get_cash(currency)
+                            amt['cash'] = cash_amount
+                            signal.alarm(0)
+                        except TimeoutError:
+                            print(f"⚠️ {account_id} {currency} 현금 조회 타임아웃", file=sys.stderr)
+                            amt['cash'] = 0.0
+                            signal.alarm(0)
+                        except Exception as e:
+                            print(f"⚠️ {account_id} {currency} 현금 조회 실패: {e}", file=sys.stderr)
+                            amt['cash'] = 0.0
+                        finally:
+                            signal.signal(signal.SIGALRM, signal.SIG_DFL)
                     
                     # 총 금액
                     amt_total = sum(amt.values())
@@ -111,30 +139,29 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
                             ratios[asset_code] = amount / amt_total
                         
                         current_ratios[account_id][currency] = ratios
-                        st.success(f"계좌 {account_id} {currency} 자산 비율 계산 완료")
+                        print(f"✅ {account_id} {currency} 완료", file=sys.stderr)
                     else:
-                        st.warning(f"계좌 {account_id} {currency} 총 자산이 0입니다")
+                        print(f"⚠️ {account_id} {currency} 자산 없음", file=sys.stderr)
                 
             except Exception as e:
-                st.error(f"계좌 {account_id} 조회 중 오류: {e}")
+                print(f"❌ 계좌 {account_id} 오류: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
                 continue
         
         if not current_ratios:
-            st.warning("조회된 계좌 데이터가 없습니다. 샘플 데이터를 사용합니다.")
+            print("⚠️ 조회된 데이터 없음. 샘플 사용", file=sys.stderr)
             return get_sample_asset_ratios()
         
         return current_ratios
         
     except Exception as e:
-        st.error(f"현재 자산 비율 조회 중 오류: {e}")
+        print(f"❌ 전체 오류: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return get_sample_asset_ratios()
 
-
-def clear_asset_ratios_cache():
-    """자산 비율 캐시를 무효화합니다."""
-    get_current_asset_ratios.clear()
-
-
+#
 def get_sample_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
     """샘플 자산 비율 데이터를 반환합니다."""
     return {
