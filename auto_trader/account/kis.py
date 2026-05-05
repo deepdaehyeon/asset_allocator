@@ -170,7 +170,6 @@ class KisAccount(BaseAccount):
         rate = 1.01 if action == "buy" else 0.99
         cnt = 0
 
-        trade_price *= rate
         order = order_method(qty=abs(qty), price=trade_price)
         while order.pending:
             time.sleep(1)
@@ -180,6 +179,7 @@ class KisAccount(BaseAccount):
             if cnt % 100 == 0:
                 # Adjust to proper tick size
                 prev_price = trade_price
+                trade_price *= rate
                 trade_price = self._adjust_price_to_tick_size(
                     trade_price,
                     currency or "KRW",
@@ -188,7 +188,7 @@ class KisAccount(BaseAccount):
                 self.messenger.send_msg(f"Modify the price of order for {ticker}: {prev_price} -> {trade_price}...")
 
             # Break after timeout
-            if cnt % 200 == 0:
+            if cnt % 1000 == 0:
                 self.messenger.send_msg(f"Order timeout for {ticker}, breaking")
                 break
 

@@ -16,7 +16,6 @@ def render_asset_allocation_page():
 
     # 현재 비율 불러오기 버튼
     col1, col2 = st.columns([1, 4])
-    st.session_state['real_assets_ratio'] = get_sample_asset_ratios() 
     with col1:
         if st.button("🔄 자산 불러오기", help="현재 자산 비율 데이터를 새로 조회합니다", type="secondary"):
             real_assets = get_current_asset_ratios()

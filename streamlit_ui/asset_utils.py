@@ -52,12 +52,8 @@ def get_current_asset_ratios() -> Dict[str, Dict[str, Dict[str, float]]]:
         # 설정 파일에서 계좌 목록 가져오기
         from .config_utils import load_asset_allocate_config
         config = load_asset_allocate_config()
-        if not config:
-            return get_sample_asset_ratios()
-        
         # 싱글톤 계좌 객체 가져오기 (캐시됨)
         accounts = get_kis_accounts(auth_config)
-        
         current_ratios = {}
         
         for account_id in config.keys():

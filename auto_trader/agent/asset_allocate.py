@@ -66,7 +66,7 @@ class AssetAllocateAgent(BaseAgent):
 
                     # Get current ratio
                     current_ratio: Dict[str, float] = defaultdict(float)
-                    all_assets= set(amt.keys()).union(set(target_ratio.keys()))
+                    all_assets= set(amt.keys()).union(set(target_ratio.keys())) 
                     for asset_name in all_assets:
                         current_ratio[asset_name] = amt[asset_name] / amt_total
 
@@ -86,6 +86,8 @@ class AssetAllocateAgent(BaseAgent):
                     order_queue: List[tuple] = []
 
                     for ticker in all_assets:
+                        if ticker =="cash": 
+                            continue
                         amt_target = target_ratio.get(ticker, 0.0) * amt_total
                         amt_diff = amt_target - amt.get(ticker, 0.0)
                         order_queue.append((ticker, amt_diff, currency))
@@ -93,6 +95,7 @@ class AssetAllocateAgent(BaseAgent):
                     # Sort queue (sell orders first, then buy orders)
                     order_queue.sort(key=lambda x: x[1])
                     self.send_msg(f"Executing {len(order_queue)} rebalancing orders for {currency}")
+                    print(order_queue)
 
                     # Execute orders
                     self._execute_order_queue(order_queue)
