@@ -1,7 +1,6 @@
 from typing import List, Optional, Tuple
 
 from auto_trader.constants import MARKET_MAPPING
-from auto_trader.utils import handle_exceptions
 
 from .base import BaseAgent
 
@@ -20,7 +19,6 @@ class CostAverageAgent(BaseAgent):
 
     name: str = "CostAverageAgent"
 
-    @handle_exceptions(reraise=True)
     def run(self) -> None:
         """Cost average buy till max quantity."""
         order_queue = self._build_order_queue()
@@ -35,7 +33,7 @@ class CostAverageAgent(BaseAgent):
         for currency in self.config.keys():
             for ticker, info in self.config[currency].items():
                 # Check max quantity constraint
-                if self._should_skip_due_to_max_qty(ticker, info):
+                if self._should_skip_due_to_max_qty(ticker, info) or self.forced:
                     continue
 
                 # Extract order parameters

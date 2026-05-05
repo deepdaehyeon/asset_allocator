@@ -9,7 +9,6 @@ import jwt
 import requests
 
 from auto_trader.constants import MIN_CRYPTO_QUANTITY, UPBIT_API_BASE_URL
-from auto_trader.utils import handle_exceptions
 
 from .base import BaseAccount
 from .models import Balance, Stock
@@ -20,12 +19,11 @@ class UpbitAccount(BaseAccount):
 
     name: str = "UpbitAccount"
 
-    def __init__(self, **kwargs):
+    def __init__(self, acc_no:str, access_key:str, secret_key:str, **kwargs):
         super().__init__(acc_no="upbit")
-        self.access_key = os.environ['UPBIT_OPEN_API_ACCESS_KEY']
-        self.secret_key = os.environ['UPBIT_OPEN_API_SECRET_KEY']
+        self.access_key = access_key
+        self.secret_key = secret_key 
 
-    @handle_exceptions(reraise=True)
     def get_balance(self) -> Balance:
         """Return account balance with typed data structure."""
         headers = self._compose_header()
@@ -68,7 +66,6 @@ class UpbitAccount(BaseAccount):
         except:
             return 0.0
 
-    @handle_exceptions(default_return=0.0, reraise=False)
     def get_cash(self, currency: str = "KRW") -> float:
         """Get available cash (KRW balance)."""
         headers = self._compose_header()
@@ -85,14 +82,12 @@ class UpbitAccount(BaseAccount):
         self.messenger.send_msg("No KRW balance found in account")
         return 0.0
 
-    @handle_exceptions(default_return=0.0, reraise=False)
     def get_stock_price(self, ticker: str, action: str = "buy") -> float:
         """Get current price of cryptocurrency."""
         params = {"markets": f"KRW-{ticker}"}
         res = requests.get(UPBIT_API_BASE_URL + "/v1/ticker", params=params).json()
         return float(res[0]['trade_price'])
 
-    @handle_exceptions(default_return=0.0, reraise=False)
     def get_qty_stock(self, ticker: str) -> float:
         """Get current quantity of specified cryptocurrency."""
         headers = self._compose_header()
@@ -111,7 +106,6 @@ class UpbitAccount(BaseAccount):
         self.messenger.send_msg(f"{ticker} not found in upbit account: 0")
         return 0.0
 
-    @handle_exceptions(reraise=True)
     def order(
         self,
         ticker: str,
@@ -203,7 +197,6 @@ class UpbitAccount(BaseAccount):
             self.messenger.send_msg(f"Order failed: {error_msg}")
             raise Exception(f"Order failed: {error_msg}")
 
-    @handle_exceptions(reraise=True)
     def _compose_header(self, params: Optional[dict] = None) -> dict:
         """Compose authentication header for Upbit API."""
         payload = {

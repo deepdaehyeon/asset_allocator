@@ -19,4 +19,5 @@ class Messenger:
             channel="C02SGLQV529",
             text=slack_msg,
         )
-        print(response)
+        if "text" in response: 
+            print(response['text'])

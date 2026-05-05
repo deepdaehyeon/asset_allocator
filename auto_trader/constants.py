@@ -1,5 +1,6 @@
 """Constants for auto trader application."""
 from typing import Dict, List
+from pathlib import Path
 
 # Market mappings by currency
 MARKET_MAPPING: Dict[str, List[str]] = {
@@ -21,7 +22,7 @@ PRICE_ADJUSTMENT_RATE_BUY = 1.001
 PRICE_ADJUSTMENT_RATE_SELL = 0.999
 
 # Minimum order amounts
-MIN_ORDER_AMOUNT = 1.0
+MIN_ORDER_AMOUNT = 10000.0  # 10,000 KRW minimum order amount
 MIN_CRYPTO_QUANTITY = 1e-6
 
 # API endpoints
@@ -46,3 +47,8 @@ USD_PRICE_THRESHOLD = 1.0
 # Slack configuration (should be moved to environment variables)
 DEFAULT_SLACK_CHANNEL = "C02SGLQV529"
 DEFAULT_USER_MENTION = "김대현"
+
+# Resolve directories relative to this package's root to be robust across environments
+_PACKAGE_ROOT = Path(__file__).resolve().parent
+AUTH_DIR = str(_PACKAGE_ROOT / "auth")
+CONFIG_DIR = str(_PACKAGE_ROOT / "config")
